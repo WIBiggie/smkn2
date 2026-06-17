@@ -4,7 +4,7 @@ import axios from 'axios';
 import { useRouter } from 'vue-router';
 
 // --- State Form Login ---
-const loginInput = ref(''); // Menampung email atau username
+const loginInput = ref(''); 
 const password = ref('');
 const remember = ref(false);
 const loading = ref(false);
@@ -27,43 +27,52 @@ const submit = async () => {
     errors.value = {};
 
     try {
-        // Ambil data dari loginInput.value (Bukan username.value)
-        const response = await axios.post('http://127.0.0.1:8000/api/login', {
+        // Menggunakan rute relatif karena baseURL sudah dikelola di main.js
+        const response = await axios.post('/login', {
             login: loginInput.value, 
             password: password.value,
             remember: remember.value
         });
 
-        // Pastikan format response sesuai dengan UserController.php Anda
         const tokenJWT = response.data.token;
         const roleUser = response.data.user.role;
+        const namaUser = response.data.user.nama_user;
 
+        // PERBAIKAN TOTAL: Selalu simpan di localStorage agar dibaca lancar oleh semua dashboard
         localStorage.setItem('auth_token', tokenJWT);
         localStorage.setItem('user_role', roleUser);
+        localStorage.setItem('user_nama', namaUser);
+
+        // Jika user tidak mencentang "Ingat saya", tandai di sessionStorage agar saat browser ditutup, otomatis logout
+        if (!remember.value) {
+            sessionStorage.setItem('session_only', 'true');
+        } else {
+            sessionStorage.removeItem('session_only');
+        }
 
         alert('Selamat, login berhasil!');
 
-        // PERBAIKAN UTAMA: Menggunakan fungsi router.push(...) yang benar
+        // Navigasi pengalihan rute berdasarkan role akun
         if (roleUser === 'jurusan') {
-            await router.push('/jurusan/dashboardjurusan');
+            await router.push('/jurusan/dashboard');
         } else if (roleUser === 'siswa') {
             await router.push('/siswa/dashboard');
         } else if (roleUser === 'sarpras' || roleUser === 'sapras') {
-            await router.push('/sarpras/dashboardsarpras');
+            await router.push('/sarpras/dashboard');
         } else {
             await router.push('/');
         }
     } catch (error) {
         if (error.response) {
             if (error.response.status === 422) {
-                errors.value = error.response.data.errors || error.response.data;
+                errors.value = error.response.data.errors || { login: [error.response.data.message] };
             } else if (error.response.status === 401 || error.response.status === 403) {
-                errorMessage.value = error.response.data.message; // Menangkap pesan 'Email/Username atau Password salah!'
+                errorMessage.value = error.response.data.message; 
             } else {
                 errorMessage.value = error.response.data.message || 'Login gagal, periksa kembali data Anda.';
             }
         } else {
-            errorMessage.value = 'Tidak dapat terhubung ke server Backend. Pastikan kp-backend menyala di port 8000!';
+            errorMessage.value = 'Tidak dapat terhubung ke server Backend. Pastikan backend Anda menyala!';
         }
         password.value = '';
     } finally {
@@ -77,9 +86,7 @@ const submit = async () => {
         class="relative flex min-h-screen items-center justify-center overflow-hidden bg-cover bg-center px-4 transition-all duration-700"
         :style="{ backgroundImage: `linear-gradient(rgba(0, 0, 0, 0.5), rgba(0, 0, 0, 0.5)), url('${currentBg}')` }"
     >
-        
         <div class="relative w-full max-w-[420px] overflow-hidden rounded-[32px] border border-white/20 bg-white/10 p-8 sm:p-10 shadow-2xl backdrop-blur-xl">
-
             <div class="mb-8 text-center">
                 <h2 class="text-3xl font-bold tracking-tight text-white">Selamat Datang</h2>
                 <p class="mt-2 text-sm text-gray-200">Silakan masuk ke akun Anda</p>

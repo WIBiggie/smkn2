@@ -1,7 +1,7 @@
 <script setup>
 import { ref, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
-import axios from 'axios'; // Pastikan axios sudah terinstall via npm
+import axios from 'axios'; 
 import { 
   LayoutDashboard, 
   Boxes, 
@@ -10,11 +10,9 @@ import {
   LogOut, 
   Menu, 
   X, 
-  Bell, 
   User 
 } from 'lucide-vue-next';
 
-// Impor komponen-komponen fitur pendukung sesuai struktur Anda
 import KelolaStok from '../components/Sarpras/KelolaStok.vue';
 import BarcodeGenerator from '../components/Sarpras/BarcodeGenerator.vue';
 import KelolaAkunJurusan from '../components/Sarpras/KelolaAkunJurusan.vue';
@@ -22,60 +20,118 @@ import KelolaAkunJurusan from '../components/Sarpras/KelolaAkunJurusan.vue';
 const router = useRouter();
 
 // --- State Navigasi & Tampilan ---
-const activeView = ref('dashboard'); // Default halaman utama dashboard
-const isMobileMenuOpen = ref(false); // Kontrol buka/tutup sidebar di mobile
-const namaAdmin = ref('Petugas Sarpras');
+const activeView = ref('dashboard'); 
+const isMobileMenuOpen = ref(false); 
+const namaAdmin = ref(localStorage.getItem('user_nama') || 'Petugas Sarpras');
 
-// --- State Data Ringkas (Diambil dinamis dari database, default 0) ---
 const statistik = ref({
   totalBarang: 0,
   stokMasukBulanIni: 0,
   distribusiJurusan: 0
 });
 
-// Fungsi mengambil data dari API Lumen
+// Fungsi mengambil data dari API 
 const fetchStatistikData = async () => {
   try {
     const token = localStorage.getItem('auth_token');
-    
-    // Sesuaikan URL host & port dengan server Lumen Anda
-    const response = await axios.get('http://localhost:8000/api/dashboard/statistik', {
-      headers: {
-        'Authorization': `Bearer ${token}`
-      }
+    const response = await axios.get('/dashboard/statistik', {
+      headers: { Authorization: `Bearer ${token}` }
     });
 
-    if (response.data.status === 'success') {
+    if (response.data && response.data.status === 'success') {
       statistik.value = response.data.data;
     }
   } catch (error) {
-    console.error('Gagal memuat data statistik dari database:', error);
+    console.error('Gagal mengambil data statistik:', error);
   }
 };
 
-// Menangani perpindahan halaman menu
 const navigateToView = (view) => {
   activeView.value = view;
-  isMobileMenuOpen.value = false; // Tutup otomatis sidebar jika di mode mobile
+  isMobileMenuOpen.value = false; 
 };
 
-// Fungsi Logout
+// Fungsi Logout Sesi
 const handleLogout = () => {
-  if (confirm('Apakah Anda yakin ingin keluar dari sistem Sarpras?')) {
+  if (confirm('Apakah Anda yakin ingin keluar dari sistem?')) {
     localStorage.removeItem('auth_token');
     localStorage.removeItem('user_role');
+    localStorage.removeItem('user_nama');
+    sessionStorage.removeItem('auth_token');
+    sessionStorage.removeItem('user_role');
+    sessionStorage.removeItem('session_only');
+    
     router.push('/');
+  }
+};
+
+// --- State & Logika Edit Profil ---
+const showProfileModal = ref(false);
+const formProfile = ref({
+  nama_user: '',
+  username: '',
+  email: '',
+  password: ''
+});
+const profileErrors = ref({});
+const loadingProfile = ref(false);
+
+const openProfileModal = async () => {
+  profileErrors.value = {};
+  formProfile.value.password = '';
+  try {
+    const token = localStorage.getItem('auth_token');
+    const response = await axios.get('/profile', {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    if (response.data.success) {
+      formProfile.value.nama_user = response.data.data.nama_user;
+      formProfile.value.username = response.data.data.username;
+      formProfile.value.email = response.data.data.email;
+      showProfileModal.value = true;
+    }
+  } catch (error) {
+    alert('Gagal mengambil data profil.');
+  }
+};
+
+const handleUpdateProfile = async () => {
+  loadingProfile.value = true;
+  profileErrors.value = {};
+  try {
+    const token = localStorage.getItem('auth_token');
+    const response = await axios.put('/profile', formProfile.value, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    if (response.data.success) {
+      alert('Profil berhasil diperbarui!');
+      namaAdmin.value = response.data.data.nama_user;
+      localStorage.setItem('user_nama', response.data.data.nama_user);
+      showProfileModal.value = false;
+    }
+  } catch (error) {
+    if (error.response && error.response.status === 422) {
+      profileErrors.value = error.response.data.errors || {};
+    } else {
+      alert('Gagal memperbarui profil.');
+    }
+  } finally {
+    loadingProfile.value = false;
   }
 };
 
 // Cek token saat komponen dimuat
 onMounted(() => {
   const token = localStorage.getItem('auth_token');
-  if (!token) {
-    router.push('/');
-  } else {
-    fetchStatistikData();
+  const role = localStorage.getItem('user_role');
+
+  if (!token || role !== 'sarpras') {
+    alert('Akses ditolak! Anda harus login sebagai Sarpras.');
+    router.push('/'); 
+    return;
   }
+
+  fetchStatistikData();
 });
 </script>
 
@@ -173,11 +229,7 @@ onMounted(() => {
         </div>
 
         <div class="flex items-center gap-4">
-          <button class="p-2 rounded-xl bg-slate-50 border border-slate-200 text-slate-500 hover:text-slate-700 hover:bg-slate-100 transition-all relative">
-            <Bell class="w-5 h-5" />
-            <span class="absolute top-1.5 right-1.5 w-2 h-2 bg-rose-500 rounded-full"></span>
-          </button>
-          <div class="flex items-center gap-2.5 pl-3 border-l border-slate-200">
+          <div @click="openProfileModal" class="flex items-center gap-2.5 pl-3 border-l border-slate-200 cursor-pointer hover:opacity-85 transition-all">
             <div class="w-9 h-9 rounded-xl bg-indigo-50 border border-indigo-200 text-indigo-600 flex items-center justify-center font-bold text-sm">
               <User class="w-4 h-4" />
             </div>
@@ -252,6 +304,50 @@ onMounted(() => {
           
         </div>
       </main>
+    </div>
+
+    <!-- Modal Edit Profil -->
+    <div v-if="showProfileModal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+      <div class="bg-white border border-slate-200 w-full max-w-md rounded-2xl overflow-hidden shadow-2xl">
+        <div class="flex items-center justify-between p-5 border-b border-slate-100">
+          <h4 class="font-bold text-slate-800 text-sm">Edit Profil Saya</h4>
+          <button @click="showProfileModal = false" class="p-1 text-slate-400 hover:text-slate-600 rounded-lg"><X class="w-5 h-5" /></button>
+        </div>
+
+        <form @submit.prevent="handleUpdateProfile" class="p-5 space-y-4 text-xs text-slate-700">
+          <div>
+            <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Nama Lengkap</label>
+            <input v-model="formProfile.nama_user" type="text" required
+                   class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 outline-none focus:border-indigo-500 focus:bg-white transition-all" />
+            <p v-if="profileErrors.nama_user" class="text-[10px] text-rose-500 italic mt-1">{{ profileErrors.nama_user[0] }}</p>
+          </div>
+
+          <div>
+            <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Username</label>
+            <input v-model="formProfile.username" type="text" required
+                   class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 outline-none focus:border-indigo-500 focus:bg-white transition-all" />
+            <p v-if="profileErrors.username" class="text-[10px] text-rose-500 italic mt-1">{{ profileErrors.username[0] }}</p>
+          </div>
+
+          <div>
+            <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Email</label>
+            <input v-model="formProfile.email" type="email" required
+                   class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 outline-none focus:border-indigo-500 focus:bg-white transition-all" />
+            <p v-if="profileErrors.email" class="text-[10px] text-rose-500 italic mt-1">{{ profileErrors.email[0] }}</p>
+          </div>
+
+          <div>
+            <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Password Baru (Kosongkan jika tidak ingin diubah)</label>
+            <input v-model="formProfile.password" type="password" placeholder="******"
+                   class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 outline-none focus:border-indigo-500 focus:bg-white transition-all" />
+            <p v-if="profileErrors.password" class="text-[10px] text-rose-500 italic mt-1">{{ profileErrors.password[0] }}</p>
+          </div>
+
+          <button type="submit" :disabled="loadingProfile" class="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-xl shadow-md transition-all">
+            {{ loadingProfile ? 'Menyimpan...' : 'Simpan Perubahan' }}
+          </button>
+        </form>
+      </div>
     </div>
 
   </div>

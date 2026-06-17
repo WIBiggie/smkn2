@@ -1,188 +1,241 @@
 <script setup>
 import { ref, onMounted } from 'vue';
 import axios from 'axios';
-import { UserPlus, ShieldCheck, Mail, Lock, Trash2, Users } from 'lucide-vue-next';
+import { UserPlus, Trash2, Shield, Mail, User, Key, RefreshCw } from 'lucide-vue-next';
 
-const namaUser = ref('');
-const username = ref('');
-const email = ref('');
-const password = ref('');
-const loading = ref(false);
-const successMsg = ref('');
-const errorFields = ref({});
+// --- State Data ---
+const users = ref([]);
+const loadingFetch = ref(false);
+const loadingSubmit = ref(false);
 
-// State untuk menyimpan daftar akun jurusan dari database
-const daftarJurusan = ref([]);
+// --- State Form Input ---
+const form = ref({
+  nama_user: '',
+  username: '',
+  email: '',
+  password: '',
+  role: 'jurusan', // Default sesuai dengan backend
+  status: 'aktif',
+  jurusan: '' // Menampung program keahlian
+});
 
-// 1. Fungsi untuk mengambil data semua akun berkategori role 'jurusan'
-const muatAkunJurusan = async () => {
+const errors = ref({});
+const successMessage = ref('');
+
+// --- Fungsi 1: Ambil Semua Daftar User ---
+const fetchUsers = async () => {
+  loadingFetch.value = true;
   try {
-    const token = localStorage.getItem('auth_token');
-    // Menembak ke API index UserController Anda
-    const response = await axios.get('http://127.0.0.1:8000/api/users', {
-      headers: { Authorization: `Bearer ${token}` }
-    });
-    
-    // Filter data agar yang muncul di tabel ini hanya yang memiliki role 'jurusan' saja
-    if (response.data && response.data.data) {
-      daftarJurusan.value = response.data.data.filter(user => user.role === 'jurusan');
+    // Memanfaatkan baseURL dari main.js
+    const response = await axios.get('/user');
+    if (response.data.success) {
+      // Filter hanya menampilkan user ber-role 'jurusan' agar rapi
+      users.value = response.data.data.filter(u => u.role === 'jurusan');
     }
   } catch (error) {
-    console.error('Gagal memuat data akun:', error);
+    console.error('Gagal mengambil daftar pengguna:', error);
+  } finally {
+    loadingFetch.value = false;
   }
 };
 
-// 2. Fungsi untuk membuat akun baru
-const buatAkunJurusan = async () => {
-  loading.value = true;
-  successMsg.value = '';
-  errorFields.value = {};
+// --- Fungsi 2: Simpan Akun Baru (Store) ---
+const handleSubmit = async () => {
+  loadingSubmit.value = true;
+  errors.value = {};
+  successMessage.value = '';
 
   try {
-    const token = localStorage.getItem('auth_token');
-    const response = await axios.post('http://127.0.0.1:8000/api/register', {
-      nama_user: namaUser.value,
-      username: username.value,
-      email: email.value,
-      password: password.value,
-      role: 'jurusan',
-      status: 'aktif'
-    }, {
-      headers: { Authorization: `Bearer ${token}` }
-    });
-
-    successMsg.value = `Akun Operator ${response.data.data.nama_user} berhasil dibuat!`;
+    const response = await axios.post('/user', form.value);
     
-    // Reset fields form
-    namaUser.value = '';
-    username.value = '';
-    email.value = '';
-    password.value = '';
-    
-    // Refresh isi tabel daftar akun secara realtime
-    muatAkunJurusan();
+    if (response.data.success) {
+      successMessage.value = response.data.message;
+      // Reset form input
+      form.value = {
+        nama_user: '',
+        username: '',
+        email: '',
+        password: '',
+        role: 'jurusan',
+        status: 'aktif',
+        jurusan: ''
+      };
+      // Refresh data tabel
+      await fetchUsers();
+    }
   } catch (error) {
     if (error.response && error.response.status === 422) {
-      errorFields.value = error.response.data.errors || error.response.data;
+      errors.value = error.response.data.errors || {};
     } else {
-      alert('Gagal mendaftarkan akun. Cek koneksi backend.');
+      alert('Terjadi kesalahan sistem saat menyimpan data.');
     }
   } finally {
-    loading.value = false;
+    loadingSubmit.value = false;
   }
 };
 
-// 3. Fungsi untuk melakukan Hapus Akun Jurusan
-const hapusAkun = async (id, nama) => {
-  if (confirm(`Apakah Anda yakin ingin menghapus akun "${nama}" secara permanen?`)) {
+// --- Fungsi 3: Hapus Akun Jurusan (Destroy) ---
+const deleteUser = async (id, nama) => {
+  if (confirm(`Apakah Anda yakin ingin menghapus akun jurusan "${nama}" secara permanen?`)) {
     try {
-      const token = localStorage.getItem('auth_token');
-      // Menembak ke endpoint delete backend (Contoh: DELETE /api/users/{id})
-      await axios.delete(`http://127.0.0.1:8000/api/users/${id}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      
-      alert('Akun berhasil dihapus dari sistem.');
-      // Refresh tabel setelah data terhapus di database
-      muatAkunJurusan();
+      const response = await axios.delete(`/user/${id}`);
+      if (response.data.success) {
+        alert(response.data.message);
+        await fetchUsers(); // Refresh tabel
+      }
     } catch (error) {
-      alert('Gagal menghapus akun. Pastikan rute destroy di backend sudah aktif.');
+      alert('Gagal menghapus data pengguna.');
     }
   }
 };
 
-// Panggil fungsi pemuatan data saat komponen pertama kali dibuka di browser
+// Ambil data pertama kali saat komponen dimuat
 onMounted(() => {
-  muatAkunJurusan();
+  fetchUsers();
 });
 </script>
 
 <template>
-  <div class="space-y-6 max-w-4xl mx-auto">
-    
-    <div class="bg-slate-50 p-6 rounded-3xl border border-slate-100 shadow-sm">
-      <div class="mb-6 flex items-center gap-3">
-        <div class="p-3 bg-indigo-100 text-indigo-600 rounded-2xl">
-          <UserPlus class="w-6 h-6" />
-        </div>
-        <div>
-          <h3 class="text-xl font-bold text-slate-800">Registrasi Akun Ketua Jurusan</h3>
-          <p class="text-sm text-slate-500">Buatkan hak akses login kontrol khusus untuk Kepala Program / Operator Jurusan.</p>
-        </div>
+  <div class="space-y-6">
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-5 rounded-2xl border border-slate-200/60 shadow-sm">
+      <div>
+        <h3 class="text-lg font-bold text-slate-800">Registrasi & Kelola Akun Jurusan</h3>
+        <p class="text-xs text-slate-400">Buat atau hapus hak akses login untuk masing-masing operator program keahlian.</p>
       </div>
-
-      <div v-if="successMsg" class="mb-4 p-4 rounded-xl bg-emerald-50 border border-emerald-100 text-emerald-700 text-sm font-semibold flex items-center gap-2">
-        <ShieldCheck class="w-5 h-5" /> {{ successMsg }}
-      </div>
-
-      <form @submit.prevent="buatAkunJurusan" class="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm space-y-4">
-        <div>
-          <label class="block text-sm font-medium text-slate-700 mb-1.5">Nama Lengkap Jabatan</label>
-          <input v-model="namaUser" type="text" placeholder="Contoh: Ketua Jurusan Rekayasa Perangkat Lunak" required class="w-full rounded-xl border border-slate-200 p-3 text-sm focus:ring-2 focus:ring-indigo-500 outline-none" />
-        </div>
-
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <label class="block text-sm font-medium text-slate-700 mb-1.5">Username Login</label>
-            <input v-model="username" type="text" placeholder="Contoh: kaprog_rpl" required class="w-full rounded-xl border border-slate-200 p-3 text-sm focus:ring-2 focus:ring-indigo-500 outline-none" />
-            <p v-if="errorFields.username" class="text-xs text-red-500 mt-1">{{ errorFields.username[0] }}</p>
-          </div>
-          <div>
-            <label class="block text-sm font-medium text-slate-700 mb-1.5">Email Instansi</label>
-            <input v-model="email" type="email" placeholder="Contoh: rpl@smk.sch.id" required class="w-full rounded-xl border border-slate-200 p-3 text-sm focus:ring-2 focus:ring-indigo-500 outline-none" />
-            <p v-if="errorFields.email" class="text-xs text-red-500 mt-1">{{ errorFields.email[0] }}</p>
-          </div>
-        </div>
-
-        <div>
-          <label class="block text-sm font-medium text-slate-700 mb-1.5">Kata Sandi Default</label>
-          <input v-model="password" type="password" placeholder="Minimal 6 karakter" required class="w-full rounded-xl border border-slate-200 p-3 text-sm focus:ring-2 focus:ring-indigo-500 outline-none" />
-          <p v-if="errorFields.password" class="text-xs text-red-500 mt-1">{{ errorFields.password[0] }}</p>
-        </div>
-
-        <button type="submit" :disabled="loading" class="w-full bg-indigo-600 text-white p-3.5 rounded-xl font-semibold shadow-md hover:bg-indigo-700 transition-all disabled:opacity-50">
-          {{ loading ? 'Mendaftarkan Akun...' : 'Buat & Aktifkan Akun' }}
-        </button>
-      </form>
+      <button @click="fetchUsers" :disabled="loadingFetch" class="flex items-center gap-2 text-xs font-semibold px-4 py-2.5 bg-slate-100 hover:bg-slate-200 rounded-xl transition-all disabled:opacity-50">
+        <RefreshCw :class="{'animate-spin': loadingFetch}" class="w-4 h-4 text-slate-600" />
+        Refresh Data
+      </button>
     </div>
 
-    <div class="bg-white p-6 rounded-3xl border border-slate-200/60 shadow-sm">
-      <div class="mb-4 flex items-center gap-2">
-        <Users class="w-5 h-5 text-indigo-600" />
-        <h4 class="text-base font-bold text-slate-800">Daftar Akun Operator Jurusan Saat Ini</h4>
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div class="bg-white p-6 rounded-2xl border border-slate-200/60 shadow-sm h-fit">
+        <div class="flex items-center gap-2.5 pb-4 border-b border-slate-100 mb-5">
+          <div class="p-2 bg-indigo-50 text-indigo-600 rounded-lg">
+            <UserPlus class="w-5 h-5" />
+          </div>
+          <h4 class="font-bold text-slate-800 text-sm">Form Pembuatan Akun</h4>
+        </div>
+
+        <div v-if="successMessage" class="mb-4 p-3 bg-emerald-50 text-emerald-700 text-xs font-medium rounded-xl border border-emerald-200/60 text-center">
+          {{ successMessage }}
+        </div>
+
+        <form @submit.prevent="handleSubmit" class="space-y-4">
+          <div>
+            <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Nama Lengkap / Jurusan</label>
+            <div class="relative">
+              <User class="absolute left-3.5 top-3.5 w-4 h-4 text-slate-400" />
+              <input v-model="form.nama_user" type="text" placeholder="Contoh: Kaprog TKJ / RPL" required
+                     class="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:border-indigo-500 focus:bg-white transition-all" />
+            </div>
+            <p v-if="errors.nama_user" class="text-[11px] text-rose-500 font-medium italic mt-1">{{ errors.nama_user[0] }}</p>
+          </div>
+
+          <div>
+            <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Username</label>
+            <div class="relative">
+              <Shield class="absolute left-3.5 top-3.5 w-4 h-4 text-slate-400" />
+              <input v-model="form.username" type="text" placeholder="username_jurusan" required
+                     class="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:border-indigo-500 focus:bg-white transition-all" />
+            </div>
+            <p v-if="errors.username" class="text-[11px] text-rose-500 font-medium italic mt-1">{{ errors.username[0] }}</p>
+          </div>
+
+          <div>
+            <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Alamat Email</label>
+            <div class="relative">
+              <Mail class="absolute left-3.5 top-3.5 w-4 h-4 text-slate-400" />
+              <input v-model="form.email" type="email" placeholder="jurusan@sekolah.sch.id" required
+                     class="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:border-indigo-500 focus:bg-white transition-all" />
+            </div>
+            <p v-if="errors.email" class="text-[11px] text-rose-500 font-medium italic mt-1">{{ errors.email[0] }}</p>
+          </div>
+
+          <div>
+            <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Program Keahlian / Jurusan</label>
+            <select v-model="form.jurusan" required
+                    class="w-full px-3.5 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:border-indigo-500 focus:bg-white transition-all">
+              <option value="" disabled>-- Pilih Program Keahlian --</option>
+              <option value="RPL">Rekayasa Perangkat Lunak (RPL)</option>
+              <option value="AV">Audio Video (AV)</option>
+              <option value="TKJ">Teknik Komputer & Jaringan (TKJ)</option>
+            </select>
+            <p v-if="errors.jurusan" class="text-[11px] text-rose-500 font-medium italic mt-1">{{ errors.jurusan[0] }}</p>
+          </div>
+
+          <div>
+            <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Kata Sandi (Min. 6 Karakter)</label>
+            <div class="relative">
+              <Key class="absolute left-3.5 top-3.5 w-4 h-4 text-slate-400" />
+              <input v-model="form.password" type="password" placeholder="******" required
+                     class="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:border-indigo-500 focus:bg-white transition-all" />
+            </div>
+            <p v-if="errors.password" class="text-[11px] text-rose-500 font-medium italic mt-1">{{ errors.password[0] }}</p>
+          </div>
+
+          <button type="submit" :disabled="loadingSubmit"
+                  class="w-full bg-gradient-to-r from-indigo-600 to-indigo-700 text-white font-semibold py-3 px-4 rounded-xl text-sm shadow-md hover:from-indigo-700 hover:to-indigo-800 transition-all disabled:opacity-50 mt-2">
+            {{ loadingSubmit ? 'Menyimpan...' : 'Daftarkan Akun' }}
+          </button>
+        </form>
       </div>
 
-      <div class="overflow-x-auto rounded-2xl border border-slate-100">
-        <table class="w-full text-left border-collapse text-sm">
-          <thead>
-            <tr class="bg-slate-50 text-slate-500 font-semibold border-b border-slate-100">
-              <th class="p-4">Nama User</th>
-              <th class="p-4">Username</th>
-              <th class="p-4">Email</th>
-              <th class="p-4 text-center">Aksi</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-if="daftarJurusan.length === 0">
-              <td colspan="4" class="p-6 text-center text-slate-400 italic">Belum ada akun data jurusan terdaftar.</td>
-            </tr>
-            <tr v-for="user in daftarJurusan" :key="user.id" class="border-b border-slate-100 hover:bg-slate-50/50 transition-colors">
-              <td class="p-4 font-medium text-slate-800">{{ user.nama_user }}</td>
-              <td class="p-4 text-slate-600 font-mono text-xs">{{ user.username }}</td>
-              <td class="p-4 text-slate-500">{{ user.email }}</td>
-              <td class="p-4 text-center">
-                <button 
-                  @click="hapusAkun(user.id, user.nama_user)" 
-                  class="p-2 text-rose-600 hover:bg-rose-50 rounded-xl transition-all inline-flex items-center gap-1 font-medium text-xs"
-                >
-                  <Trash2 class="w-4 h-4" /> Hapus Akun
-                </button>
-              </td>
-            </tr>
-          </tbody>
-        </table>
+      <div class="lg:col-span-2 bg-white p-6 rounded-2xl border border-slate-200/60 shadow-sm flex flex-col justify-between">
+        <div>
+          <div class="flex items-center gap-2.5 pb-4 border-b border-slate-100 mb-4">
+            <div class="p-2 bg-slate-100 text-slate-700 rounded-lg">
+              <User class="w-5 h-5" />
+            </div>
+            <h4 class="font-bold text-slate-800 text-sm">Daftar Akun Operator Terdaftar</h4>
+          </div>
+
+          <div class="overflow-x-auto">
+            <table class="w-full text-left text-sm text-slate-600">
+              <thead>
+                <tr class="bg-slate-50 text-slate-400 font-bold text-xs uppercase border-b border-slate-100">
+                  <th class="px-4 py-3 rounded-l-xl">Nama Pengguna</th>
+                  <th class="px-4 py-3">Username & Email</th>
+                  <th class="px-4 py-3 text-center">Status</th>
+                  <th class="px-4 py-3 text-center rounded-r-xl w-20">Aksi</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-slate-100">
+                <tr v-if="users.length === 0" class="text-center">
+                  <td colspan="4" class="py-8 text-slate-400 text-xs italic">Belum ada akun operator jurusan yang terdaftar.</td>
+                </tr>
+                <tr v-for="user in users" :key="user.id" class="hover:bg-slate-50/60 transition-colors">
+                  <td class="px-4 py-3.5 font-semibold text-slate-800">{{ user.nama_user }}</td>
+                  <td class="px-4 py-3.5 leading-normal">
+                    <span class="block font-medium text-slate-700 text-xs bg-slate-100 w-fit px-2 py-0.5 rounded-md mb-1">@{{ user.username }}</span>
+                    <span class="text-xs text-slate-400 block">{{ user.email }}</span>
+                    <span v-if="user.jurusan" class="inline-block text-[10px] bg-indigo-50 text-indigo-600 font-bold uppercase px-1.5 py-0.5 rounded border border-indigo-150 mt-1">Jurusan: {{ user.jurusan }}</span>
+                  </td>
+                  <td class="px-4 py-3.5 text-center">
+                    <span :class="user.status === 'aktif' ? 'bg-emerald-50 text-emerald-600 border-emerald-200' : 'bg-rose-50 text-rose-600 border-rose-200'" 
+                          class="px-2.5 py-1 text-xs border font-semibold rounded-full capitalize">
+                      {{ user.status }}
+                    </span>
+                  </td>
+                  <td class="px-4 py-3.5 text-center">
+                    <button @click="deleteUser(user.id, user.nama_user)" class="p-2 text-rose-500 hover:bg-rose-50 rounded-xl transition-all" title="Hapus Permanen">
+                      <Trash2 class="w-4 h-4" />
+                    </button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
       </div>
     </div>
-
   </div>
 </template>
+
+<style scoped>
+.transition-all {
+  transition-property: all;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  transition-duration: 200ms;
+}
+</style>
